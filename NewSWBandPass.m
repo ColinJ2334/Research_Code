@@ -1,52 +1,35 @@
-function bp_data = NewSWBandPass(sw_data, mapChanData)
+function sw_data = NewSWBandPass(sw_data, mapChanData)
 
-% wt_param, sw_param, StageData, channel, wave_ind; taking this out of the
-% code logic. Not necessary. 
-num_events = size(sw_data.TimeSeries, 2);  % Number of events
-trough_values = zeros(1, num_events);  % Initialize array for trough values
-trough_indices = zeros(1, num_events); % Initialize array for trough indices
+%Finds indices of individual slow wave events for the original time series
+%data, from the whole set of EEG data.
+data = sw_data.TimeSeries;
+%This function detects zero crossings, trough, and peak indices
+[og_zcp, og_PeakIndex, og_trough] = Update_ZCP(data); 
 
-for event = 1:num_events
-    [trough_values(event), trough_indices(event)] = min(sw_data.TimeSeries(:, event));
-end
+%This function orders events so that the event match histogram data works
+%ie if it finds event markers that are not well ordered as defined in the
+%data structure it will make an apprximation.
+[og_zcp, og_PeakIndex] = Ordered_Events(og_zcp, og_PeakIndex);
 
-% Now update your data structures with these new trough values and indices
-% ...
-
-%chan = event_data{wave_ind}.MapChanIndex;
-chan = sw_data.MapChanIndex;
-ChanList = mapChanData.ChannelStr;
-chan_str = ChanList(mapChanData.Channel(chan,:));
-
-bp_param = New_BandpassParameters(sw_data, chan_str);
-if isempty(bp_param)
-    warning('User canceled. Bandpass parameters not set.')
-    return;
-end
-
-%ChanList = sw_data.ChannelStr;
-bp_chan_ind = find(strcmpi(strtrim(ChanList), strtrim(bp_param.ChannelStr)));
-if ~any(mapChanData.Channel == bp_chan_ind)
-    % Add channel to mapped data
-    ProcessNewChannel(sw_data.FromFile, bp_chan_ind, sw_data.ChannelFile);
-end
-
-bp_param.Channel = bp_chan_ind;
-bp_param.MapChanIndex = find(mapChanData.Channel == bp_chan_ind);
-if ~mapChanData.IsProcessed(bp_param.MapChanIndex,:)
-    PreProcessChannelData(sw_data.ChannelFile, bp_param.MapChanIndex);
-end
+%Lets you re bandpass the time series data directly without changing the
+%number of events
+bp_data = re_bp_data(sw_data);
  
-%%% Computes new time series data
-bp_data = New_BandPassEvent(bp_param, sw_data, mapChanData); 
+sw_data.TimeSeries = bp_data;
+[zero_cross_pairs, PeakIndex, TroughIndex] = Update_ZCP(bp_data);
 
-[zero_cross_pairs, PeakIndex] = Update_ZCP(bp_data);
+%Make sure they are ordered.
+[zero_cross_pairs, PeakIndex] = Ordered_Events(zero_cross_pairs, PeakIndex);
 
-bp_data.EventMarkers.ZeroCrossPairs = zero_cross_pairs;
-bp_data.EventMarkers.PeakIndex = PeakIndex;
+%This function updates all event markers.
+sw_data = Update_all_EventMarkers(PeakIndex, TroughIndex, zero_cross_pairs, og_zcp, sw_data, og_PeakIndex);
 
-% save('C:\Users\Colin\OneDrive\Desktop\SWS Code\Outside_GUI\sw_dataFile.mat', 'sw_data');
-% save('C:\Users\Colin\OneDrive\Desktop\SWS Code\Outside_GUI\bp_dataFile.mat', 'bp_data');
-%look at subset of zerocrosspairs, try shifting the pairs that have matched
-%indices %use binary vectot to pull good indices. 
+%check_ordered function just checks to see if the event markers are in in
+%fact well ordered.
+%disorder = check_ordered(sw_data.EventMarkers.ZeroCrossPairs, sw_data.EventMarkers.TroughIndex, sw_data.EventMarkers.PeakIndex);
+
+%sw_data = Aligned_EventMarkers(zero_cross_pairs, PeakIndex, TroughIndex, sw_data);
+
+%disorder = check_ordered(sw_data.EventMarkers.ZeroCrossPairs, sw_data.EventMarkers.TroughIndex, sw_data.EventMarkers.PeakIndex);
+
 end
